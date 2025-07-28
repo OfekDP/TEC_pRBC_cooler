@@ -1,9 +1,3 @@
-// index.h
-// This file contains the HTML content for the web page.
-// It is stored in a separate header file to avoid parsing issues with R"rawliteral" strings
-// that can cause compilation errors in some Arduino/ESP32 toolchains.
-
-const char PROGMEM INDEX_HTML[] = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -14,52 +8,105 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
   body {
     font-family: Arial, sans-serif;
     text-align: center;
-    background-color: #e0e0e0; /* Grey background */
-    margin: 0; /* Remove default margin */
-    padding: 20px; /* Add some padding around content */
-    display: flex; /* Use flexbox for centering */
-    flex-direction: column; /* Arrange items vertically */
-    align-items: center; /* Center horizontally */
-    min-height: 100vh; /* Ensure body takes full viewport height */
+    background-color: #e0e0e0;
+    margin: 0;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
   }
   h1 {
-    color: #000066; /* Dark blue color from screenshot */
-    font-size: 2.5em; /* Adjust font size to match screenshot */
-    margin-bottom: 5px; /* Reduce space below h1 */
+    color: #000066;
+    font-size: 2.5em;
+    margin-bottom: 5px;
   }
-  /* Removed #status */
-  #totalTimePassed, #liveTempDisplay { /* Changed from #uptime to #totalTimePassed */
+  #totalTimePassed {
     color: #555555;
     margin-top: 0;
     margin-bottom: 10px;
+    font-size: 1.2em;
+  }
+  #liveTempDisplay {
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 20px;
     font-size: 1.1em;
   }
-  #totalTimePassed { /* Changed from #uptime */
-      margin-bottom: 20px; /* Space between header and live temp display */
-      font-size: 1.2em;
+  #liveTempDisplay sub {
+    vertical-align: sub;
+    font-size: smaller;
   }
 
-  /* This will be the container for the graph, to give it the black border and white background */
+  /* Wrapper for graph and legend */
+  #mainContentWrapper {
+    display: flex;
+    flex-direction: row; 
+    align-items: flex-start; 
+    justify-content: center;
+    width: 95%;
+    max-width: 1300px; 
+    /* The 'gap' property is removed to allow for custom positioning */
+  }
+
   #chartContainer {
-    width: 90%;
-    max-width: 800px; /* Max width for graph area */
-    margin: 20px auto; /* Center the container and add vertical space */
-    background-color: white; /* White background for the graph area */
-    padding: 15px; /* Padding inside the box */
+    flex-grow: 1; 
+    max-width: 1050px;
+    background-color: white;
+    padding: 15px;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    border: 2px solid black; /* Black border for division */
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    border: 2px solid black;
+    box-sizing: border-box;
   }
 
-  /* The actual dygraph div needs a height */
   #graphdiv {
-    width: 100%; /* Take full width of its container */
-    height: 400px; /* Set a fixed height for the graph */
+    width: 100%;
+    height: 600px;
   }
 
-  /* Force subscript rendering within Dygraph legend (may still be needed for other reasons) */
-  .dygraph-legend sub {
+  /* CSS for the custom legend container */
+  #legendContainer {
+    width: auto; /* Auto-size width to content */
+    flex-shrink: 0; 
+    background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent background */
+    padding: 5px 15px;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 1px solid #ababab;
+    box-sizing: border-box;
+    /* Positioning changes */
+    margin-left: -325px; /* Move 50px to the left */
+    position: relative;
+    top: 2px;
+    z-index: 10; /* Ensure it's on top of the graph */
+  }
+  #legendContainer h3 {
+      display: none; /* Hide the "Legend" title */
+  }
+  #customLegend {
+      display: flex; /* Arrange legend items horizontally */
+      flex-direction: row;
+  }
+  .legend-item {
+      padding: 5px 0;
+      margin-right: 15px; /* Add space between horizontal items */
+  }
+  .legend-item:last-child {
+      margin-right: 0; /* Remove margin from the last item */
+  }
+  .legend-label {
+      display: flex;
+      align-items: center;
+      font-weight: bold;
+  }
+  .legend-color-box {
+      width: 15px;
+      height: 15px;
+      margin-right: 8px;
+      border: 1px solid #555;
+  }
+  .legend-item sub {
     vertical-align: sub;
     font-size: smaller;
   }
@@ -68,203 +115,145 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
 <body>
 
 <h1>Mobile Thermoelectric pRBC Refrigeration System</h1>
-<p id="totalTimePassed">Total Time: --:--:--</p> <p id="liveTempDisplay">Fetching data...</p>
+<p id="totalTimePassed">Total Run Time: --:--:--</p>
+<p id="liveTempDisplay">Waiting for data...</p>
 
-
-<div id="chartContainer">
-    <div id="graphdiv"></div>
+<div id="mainContentWrapper">
+    <div id="chartContainer">
+        <div id="graphdiv"></div>
+    </div>
+    <div id="legendContainer">
+        <h3>Legend</h3>
+        <div id="customLegend">Waiting for data...</div>
+    </div>
 </div>
 
 <script>
   let dygraphChart;
   let dygraphData = [];
-  // 3 hours * 60 minutes/hour * 60 seconds/minute = 10800 seconds/points
   const max_data_points = 10800;
 
-  const liveTempDisplay = document.getElementById('liveTempDisplay');
   const totalTimePassedDisplay = document.getElementById('totalTimePassed');
+  const liveTempDisplay = document.getElementById('liveTempDisplay');
+  const customLegendDiv = document.getElementById('customLegend');
+  
+  const GOOGLE_SHEETS_SCRIPT_URL_JS = "https://script.google.com/macros/s/AKfycbzQR9pFbZ2_gMiWDAQHKI6l_ljM-56DwsU_ro9cECfPLk2uai6I-iL7LUoSwPIy3xzR/exec";
+  const pollingInterval = 30000;
 
-  // IMPORTANT: This should be the SAME URL as in your ESP32 code (aaa.ino)
-  const GOOGLE_SHEETS_SCRIPT_URL_JS = "https://script.google.com/macros/s/AKfycbxf_eCOGxhebT9VcirPCecN-gkxNBucyKSCS5ItNtDRPHVxd9Xes06eTSMkP21oAtNd8Q/exec";
+  let latestSecondsCounterValue = undefined;
 
-  // Interval for polling Google Sheets for updates (1 second)
-  const pollingInterval = 1000; // Poll every 1 second
-
-  let firstDataSecondsCounter = 0; // To store the seconds_counter of the very first data point for total time calculation
+  const formatNum = (num) => num < 10 ? '0' + num : num;
 
   function updateTotalTimePassedDisplay() {
-      if (firstDataSecondsCounter === 0) {
-          totalTimePassedDisplay.textContent = 'Total Time: --:--:-- (Waiting for data...)';
-          return;
-      }
-
-      // Find the latest seconds_counter from the graph data
-      let latestSecondsCounter = 0;
-      if (dygraphData.length > 0) {
-          latestSecondsCounter = dygraphData[dygraphData.length - 1][0]; // Assuming seconds_counter is the first element in each data point array
-      }
-
-      const elapsedSeconds = latestSecondsCounter - firstDataSecondsCounter;
-
-      const hours = Math.floor(elapsedSeconds / 3600);
-      const minutes = Math.floor((elapsedSeconds % 3600) / 60);
-      const seconds = Math.floor(elapsedSeconds % 60);
-
-      const formatTime = (num) => num < 10 ? '0' + num : num;
-      totalTimePassedDisplay.textContent = `Total Time: ${formatNum(hours)}:${formatNum(minutes)}:${formatNum(seconds)}`;
+    if (latestSecondsCounterValue === undefined) {
+      totalTimePassedDisplay.textContent = 'Total Run Time: --:--:-- (Waiting for data...)';
+      return;
+    }
+    const totalElapsedSeconds = latestSecondsCounterValue;
+    const hours = Math.floor(totalElapsedSeconds / 3600);
+    const minutes = Math.floor((totalElapsedSeconds % 3600) / 60);
+    const seconds = Math.floor(totalElapsedSeconds % 60);
+    totalTimePassedDisplay.textContent = `Total Run Time: ${formatNum(hours)}:${formatNum(minutes)}:${formatNum(seconds)}`;
   }
-
-  // Update total time passed every second
   setInterval(updateTotalTimePassedDisplay, 1000);
 
-  // Function to fetch ALL data from Google Sheets (both history and latest for live display)
+  function updateCustomLegend() {
+    if (!dygraphChart) {
+      customLegendDiv.innerHTML = 'Waiting for data...';
+      return;
+    }
+
+    let html = '';
+    const series = dygraphChart.getLabels().slice(1);
+    const seriesColors = dygraphChart.getColors();
+
+    series.forEach((label, i) => {
+        const displayLabel = label.replace("T", "T<sub>") + "</sub>";
+        html += `<div class="legend-item">
+                    <span class="legend-label">
+                        <div class="legend-color-box" style="background-color: ${seriesColors[i]};"></div>
+                        <span>${displayLabel}</span>
+                    </span>
+                </div>`;
+    });
+    
+    customLegendDiv.innerHTML = html;
+  }
+
   async function fetchAllDataFromSheets() {
-      console.log("Fetching all data from Google Sheets...");
-      liveTempDisplay.textContent = 'Fetching data...'; // Indicate data loading
+    try {
+      const response = await fetch(`${GOOGLE_SHEETS_SCRIPT_URL_JS}?action=read_history`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const allSensorData = await response.json();
 
-      try {
-          const response = await fetch(`${GOOGLE_SHEETS_SCRIPT_URL_JS}?action=read_history`);
-          if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const allSensorData = await response.json();
-          console.log("All data received:", allSensorData);
+      if (allSensorData.length > 0) {
+        dygraphData = allSensorData.map(point => [
+          new Date(point.timestamp * 1000),
+          point.T_pRBC,
+          point.T_enc,
+          point.T_env,
+          point.T_TEC
+        ]);
 
-          dygraphData = []; // Reset the data array each time for a fresh view from the sheet
-          if (allSensorData.length > 0) {
-              // Set the first seconds_counter if not already set (for total time display)
-              if (firstDataSecondsCounter === 0) {
-                  firstDataSecondsCounter = allSensorData[0].seconds_counter;
-                  console.log("Initial data collection seconds_counter set to:", firstDataSecondsCounter);
-              }
+        if (dygraphData.length > max_data_points) {
+          dygraphData = dygraphData.slice(dygraphData.length - max_data_points);
+        }
 
-              allSensorData.forEach(point => {
-                  // Use seconds_counter for X-axis (time)
-                  dygraphData.push([
-                      point.seconds_counter, // X-axis data
-                      point.T_pRBC,
-                      point.T_enc,
-                      point.T_env,
-                      point.T_TEC
-                  ]);
-              });
+        const latestDataPoint = allSensorData[allSensorData.length - 1];
+        latestSecondsCounterValue = parseInt(latestDataPoint.seconds_counter);
 
-              // Trim data to max_data_points if history is too long
-              if (dygraphData.length > max_data_points) {
-                  dygraphData = dygraphData.slice(dygraphData.length - max_data_points);
-              }
-
-              // Get the latest data point for the live display
-              const latestData = allSensorData[allSensorData.length - 1]; // Last element is the most recent
-              liveTempDisplay.innerHTML = `Live Temperatures Plotting:
-                  T<sub>pRBC</sub> = ${latestData.T_pRBC !== undefined ? latestData.T_pRBC.toFixed(3) : '--.--'} &deg;C,
-                  T<sub>enc</sub> = ${latestData.T_enc !== undefined ? latestData.T_enc.toFixed(3) : '--.--'} &deg;C,
-                  T<sub>env</sub> = ${latestData.T_env !== undefined ? latestData.T_env.toFixed(3) : '--.--'} &deg;C,
-                  T<sub>TEC</sub> = ${latestData.T_TEC !== undefined ? latestData.T_TEC.toFixed(3) : '--.--'} &deg;C`;
-
-          } else {
-              liveTempDisplay.innerHTML = `Live Temperatures Plotting: --.-- &deg;C`; // No data yet
-          }
-
-          // Initialize or update the chart
-          const dygraphOptions = {
-            // Updated labels for Dygraph, now X-axis is "Seconds" or "Time" based on the new column
-            labels: ["Seconds", "TpRBC", "Tenc", "Tenv", "TTEC"],
-            ylabel: "Temperature (&deg;C)",
-            xlabel: "Time (HH:MM:SS from Start)", // Clarify X-axis label
-            axes: {
-              y: {
-                valueRange: [-6, 32],
-              },
-              x: { // Define X-axis as numeric, not time series, and format its labels
-                axisLabelFormatter: function(x) {
-                    // Format seconds into HH:MM:SS for the X-axis labels
-                    let hours = Math.floor(x / 3600);
-                    let minutes = Math.floor((x % 3600) / 60);
-                    let seconds = Math.floor(x % 60);
-                    const formatNum = (num) => num < 10 ? '0' + num : num;
-                    return `${formatNum(hours)}:${formatNum(minutes)}:${formatNum(seconds)}`;
-                },
-                valueFormatter: function(x) {
-                    // Format seconds into HH:MM:SS for tooltips/hover
-                    let hours = Math.floor(x / 3600);
-                    let minutes = Math.floor((x % 3600) / 60);
-                    let seconds = Math.floor(x % 60);
-                    const formatNum = (num) => num < 10 ? '0' + num : num;
-                    return `${formatNum(hours)}:${formatNum(minutes)}:${formatNum(seconds)}`;
-                }
-              }
-            },
-            series: {
-              "TpRBC": { color: "red" },
-              "Tenc":  { color: "blue" },
-              "Tenv":  { color: "green" },
-              "TTEC":  { color: "orange" }
-            },
-            animatedZooms: false,
-            drawPoints: true,
-            strokeWidth: 1.5,
-            legend: "always",
-            fillGraph: false,
-            useHtmlLabels: true,
-            labelsSeparateLines: false,
-          };
-
-          if (dygraphChart) {
-              dygraphChart.updateOptions({ 'file': dygraphData });
-          } else {
-              dygraphChart = new Dygraph(
-                document.getElementById("graphdiv"),
-                dygraphData,
-                dygraphOptions
-              );
-          }
-          // Manual legend fix after chart update/creation
-          fixLegendSubscripts();
-
-      } catch (error) {
-          console.error("Error fetching all data from Sheets:", error);
-          liveTempDisplay.textContent = 'Error fetching data. Check console.';
-          totalTimePassedDisplay.textContent = 'Total Time: Sync Error!';
+        liveTempDisplay.innerHTML = `Live Temperatures Plotting:
+          T<sub>pRBC</sub> = ${latestDataPoint.T_pRBC !== undefined ? latestDataPoint.T_pRBC.toFixed(3) : '--.--'} &deg;C,
+          T<sub>enc</sub> = ${latestDataPoint.T_enc !== undefined ? latestDataPoint.T_enc.toFixed(3) : '--.--'} &deg;C,
+          T<sub>env</sub> = ${latestDataPoint.T_env !== undefined ? latestDataPoint.T_env.toFixed(3) : '--.--'} &deg;C,
+          T<sub>TEC</sub> = ${latestDataPoint.T_TEC !== undefined ? latestDataPoint.T_TEC.toFixed(3) : '--.--'} &deg;C`;
+      } else {
+        liveTempDisplay.textContent = 'Waiting for data...';
+        totalTimePassedDisplay.textContent = 'Total Run Time: --:--:-- (No data yet)';
+        dygraphData = [];
+        latestSecondsCounterValue = undefined;
       }
+
+      const dygraphOptions = {
+        labels: ["Time", "TpRBC", "Tenc", "Tenv", "TTEC"],
+        ylabel: "Temperature (&deg;C)",
+        xlabel: "Time-of-Day",
+        axes: {
+          y: { valueRange: [-6, 32] },
+          x: { valueFormatter: Dygraph.dateString_ }
+        },
+        series: {
+          "TpRBC": { color: "red" },
+          "Tenc":  { color: "blue" },
+          "Tenv":  { color: "green" },
+          "TTEC":  { color: "orange" }
+        },
+        animatedZooms: false,
+        drawPoints: true,
+        strokeWidth: 1.5,
+        legend: 'never',
+        highlightCallback: null,
+        unhighlightCallback: null
+      };
+
+      if (dygraphChart) {
+        dygraphChart.updateOptions({ 'file': dygraphData });
+      } else {
+        dygraphChart = new Dygraph(document.getElementById("graphdiv"), dygraphData, dygraphOptions);
+      }
+      
+      updateCustomLegend();
+
+    } catch (error) {
+      console.error("Error fetching all data from Sheets:", error);
+      liveTempDisplay.innerHTML = `<span style="color:red;">Live Temperatures: Data Sync Error!</span>`;
+      totalTimePassedDisplay.textContent = 'Total Run Time: Sync Error!';
+      customLegendDiv.innerHTML = `<span style="color:red;">Sync Error!</span>`;
+    }
   }
 
-  // Manual legend fix function
-  function fixLegendSubscripts() {
-      const legendElement = document.querySelector('.dygraph-legend');
-      if (legendElement) {
-          const spans = legendElement.querySelectorAll('span');
-          spans.forEach(span => {
-              let currentHtml = span.innerHTML;
-              let newHtml = currentHtml;
-
-              // Ensure the replacement logic is precise and avoids re-replacing
-              if (currentHtml.includes("TpRBC") && !currentHtml.includes("<sub>pRBC</sub>")) {
-                  newHtml = newHtml.replace("TpRBC", "T<sub>pRBC</sub>");
-              }
-              if (currentHtml.includes("Tenc") && !currentHtml.includes("<sub>enc</sub>")) {
-                  newHtml = newHtml.replace("Tenc", "T<sub>enc</sub>");
-              }
-              if (currentHtml.includes("Tenv") && !currentHtml.includes("<sub>env</sub>")) {
-                  newHtml = newHtml.replace("Tenv", "T<sub>env</sub>");
-              }
-              if (currentHtml.includes("TTEC") && !currentHtml.includes("<sub>TEC</sub>")) {
-                  newHtml = newHtml.replace("TTEC", "T<sub>TEC</sub>");
-              }
-              if (newHtml !== currentHtml) {
-                  span.innerHTML = newHtml;
-              }
-          });
-      }
-  }
-
-  // Initial fetch when the page loads
   fetchAllDataFromSheets();
-
-  // Poll Google Sheets for updates periodically
   setInterval(fetchAllDataFromSheets, pollingInterval);
-
 </script>
 </body>
 </html>
-)rawliteral";
